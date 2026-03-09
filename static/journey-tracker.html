@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Journey Tracker - RenewAI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            color: #2d3748;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .stat-subtext {
+            color: #a0aec0;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .journey-pipeline {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .pipeline-title {
+            font-size: 20px;
+            color: #2d3748;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+
+        .pipeline-stages {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        .stage {
+            flex: 1;
+            min-width: 140px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .stage:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            border-color: #667eea;
+        }
+
+        .stage.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .stage-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .stage.active .stage-name {
+            color: white;
+        }
+
+        .stage-count {
+            font-size: 28px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stage.active .stage-count {
+            color: white;
+        }
+
+        .stage-label {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .stage.active .stage-label {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .customers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .customer-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-left: 4px solid #667eea;
+        }
+
+        .customer-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .customer-card.risk-high {
+            border-left-color: #f56565;
+        }
+
+        .customer-card.risk-medium {
+            border-left-color: #ed8936;
+        }
+
+        .customer-card.risk-low {
+            border-left-color: #48bb78;
+        }
+
+        .customer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .customer-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .risk-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .risk-badge.high {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .risk-badge.medium {
+            background: #feebc8;
+            color: #c05621;
+        }
+
+        .risk-badge.low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .customer-details {
+            font-size: 13px;
+            color: #718096;
+            line-height: 1.8;
+        }
+
+        .customer-details strong {
+            color: #2d3748;
+        }
+
+        .customer-footer {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .channel-icon {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #edf2f7;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #4a5568;
+        }
+
+        .view-details {
+            color: #667eea;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .view-details:hover {
+            text-decoration: underline;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: white;
+            font-size: 18px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: #718096;
+            font-size: 16px;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            float: right;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .close {
+            color: #a0aec0;
+            float: right;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close:hover {
+            color: #2d3748;
+        }
+
+        .timeline {
+            margin-top: 20px;
+        }
+
+        .timeline-item {
+            padding: 15px;
+            border-left: 3px solid #667eea;
+            margin-left: 10px;
+            margin-bottom: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .timeline-date {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+
+        .timeline-content {
+            font-size: 14px;
+            color: #2d3748;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 Customer Journey Tracker</h1>
+            <p class="subtitle">Real-time renewal pipeline visualization | Suraksha Life Insurance - PROJECT RenewAI v2.0</p>
+        </div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">Total Customers</div>
+                <div class="stat-value" id="totalCustomers">-</div>
+                <div class="stat-subtext">In renewal pipeline</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending</div>
+                <div class="stat-value" id="pendingCustomers">-</div>
+                <div class="stat-subtext">Awaiting renewal</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Renewed</div>
+                <div class="stat-value" id="renewedCustomers">-</div>
+                <div class="stat-subtext">Successfully renewed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Renewal Rate</div>
+                <div class="stat-value" id="renewalRate">-</div>
+                <div class="stat-subtext">Target: 88%</div>
+            </div>
+        </div>
+
+        <div class="journey-pipeline">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+                <h2 class="pipeline-title">Journey Pipeline</h2>
+                <button class="refresh-btn" onclick="loadJourneyData()">🔄 Refresh</button>
+            </div>
+            
+            <div class="pipeline-stages" id="pipelineStages">
+                <div class="loading">Loading journey data...</div>
+            </div>
+
+            <div class="customers-grid" id="customersGrid"></div>
+        </div>
+    </div>
+
+    <!-- Customer Detail Modal -->
+    <div id="customerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modalContent">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        let journeyData = null;
+        let selectedStage = 'T-45';
+
+        async function loadJourneyData() {
+            try {
+                const response = await fetch('/api/journey/tracker');
+                journeyData = await response.json();
+                
+                updateStats(journeyData.summary);
+                renderPipeline(journeyData);
+                renderCustomers(selectedStage);
+            } catch (error) {
+                console.error('Error loading journey data:', error);
+                document.getElementById('pipelineStages').innerHTML = 
+                    '<div class="empty-state">Error loading data. Please try again.</div>';
+            }
+        }
+
+        function updateStats(summary) {
+            document.getElementById('totalCustomers').textContent = summary.total_customers;
+            document.getElementById('pendingCustomers').textContent = summary.pending;
+            document.getElementById('renewedCustomers').textContent = summary.renewed;
+            document.getElementById('renewalRate').textContent = summary.renewal_rate.toFixed(1) + '%';
+        }
+
+        function renderPipeline(data) {
+            const stages = data.journey_stages;
+            const stageDistribution = data.stage_distribution;
+            
+            const html = stages.map(stage => {
+                const stageData = stageDistribution[stage] || { count: 0 };
+                const isActive = stage === selectedStage;
+                
+                return `
+                    <div class="stage ${isActive ? 'active' : ''}" onclick="selectStage('${stage}')">
+                        <div class="stage-name">${stage}</div>
+                        <div class="stage-count">${stageData.count}</div>
+                        <div class="stage-label">customers</div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('pipelineStages').innerHTML = html;
+        }
+
+        function selectStage(stage) {
+            selectedStage = stage;
+            renderPipeline(journeyData);
+            renderCustomers(stage);
+        }
+
+        function renderCustomers(stage) {
+            if (!journeyData) return;
+            
+            const stageData = journeyData.stage_distribution[stage];
+            if (!stageData || stageData.customers.length === 0) {
+                document.getElementById('customersGrid').innerHTML = 
+                    '<div class="empty-state">No customers in this stage</div>';
+                return;
+            }
+            
+            const html = stageData.customers.map(customer => {
+                const riskClass = customer.lapse_risk.toLowerCase();
+                return `
+                    <div class="customer-card risk-${riskClass}" onclick="viewCustomerDetails('${customer.customer_id}')">
+                        <div class="customer-header">
+                            <div class="customer-name">${customer.name}</div>
+                            <div class="risk-badge ${riskClass}">${customer.lapse_risk}</div>
+                        </div>
+                        <div class="customer-details">
+                            <div><strong>Policy:</strong> ${customer.policy_type}</div>
+                            <div><strong>Premium:</strong> ₹${customer.premium.toLocaleString()}</div>
+                            <div><strong>Due Date:</strong> ${new Date(customer.due_date).toLocaleDateString()}</div>
+                            ${customer.last_contact ? `<div><strong>Last Contact:</strong> ${new Date(customer.last_contact).toLocaleDateString()}</div>` : ''}
+                        </div>
+                        <div class="customer-footer">
+                            <span class="channel-icon">📱 ${customer.preferred_channel}</span>
+                            <a href="#" class="view-details" onclick="event.stopPropagation(); viewCustomerDetails('${customer.customer_id}')">View Details →</a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('customersGrid').innerHTML = html;
+        }
+
+        async function viewCustomerDetails(customerId) {
+            document.getElementById('customerModal').style.display = 'block';
+            document.getElementById('modalContent').innerHTML = '<div class="loading">Loading customer details...</div>';
+            
+            try {
+                const response = await fetch(`/api/journey/customer/${customerId}`);
+                const data = await response.json();
+                
+                const customer = data.customer;
+                const journey = data.journey;
+                const risk = data.risk_assessment;
+                
+                const html = `
+                    <h2>${customer.name}</h2>
+                    <p style="color: #718096; margin-bottom: 20px;">${customer.policy_number} | ${customer.policy_type}</p>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <strong>Annual Premium:</strong> ₹${customer.annual_premium.toLocaleString()}
+                        </div>
+                        <div>
+                            <strong>Sum Assured:</strong> ₹${customer.sum_assured.toLocaleString()}
+                        </div>
+                        <div>
+                            <strong>Due Date:</strong> ${new Date(customer.due_date).toLocaleDateString()}
+                        </div>
+                        <div>
+                            <strong>Days to Due:</strong> ${journey.days_to_due_date} days
+                        </div>
+                        <div>
+                            <strong>Preferred Channel:</strong> ${customer.preferred_channel}
+                        </div>
+                        <div>
+                            <strong>Language:</strong> ${customer.preferred_language}
+                        </div>
+                    </div>
+                    
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 10px;">Journey Progress</h3>
+                        <div style="background: #e2e8f0; height: 20px; border-radius: 10px; overflow: hidden;">
+                            <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; width: ${journey.progress_percentage}%;"></div>
+                        </div>
+                        <p style="margin-top: 10px; font-size: 14px; color: #718096;">
+                            Current Stage: <strong>${journey.current_stage}</strong> (${journey.progress_percentage.toFixed(0)}% complete)
+                        </p>
+                    </div>
+                    
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 10px;">Risk Assessment</h3>
+                        <div><strong>Risk Level:</strong> <span class="risk-badge ${risk.risk_level.toLowerCase()}">${risk.risk_level}</span></div>
+                        <div style="margin-top: 10px;"><strong>Lapse Propensity:</strong> ${(risk.propensity_to_lapse * 100).toFixed(1)}%</div>
+                        <div><strong>Persistency Score:</strong> ${(risk.persistency_score * 100).toFixed(1)}%</div>
+                    </div>
+                    
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 10px;">Next Recommended Action</h3>
+                        <div style="font-size: 14px; color: #2d3748;">
+                            <strong>${data.next_action.action}:</strong> ${data.next_action.message}
+                        </div>
+                        <div style="margin-top: 8px; font-size: 13px; color: #718096;">
+                            Channel: ${data.next_action.channel}
+                        </div>
+                    </div>
+                    
+                    ${data.timeline.length > 0 ? `
+                        <h3 style="margin-bottom: 15px;">Recent Activity</h3>
+                        <div class="timeline">
+                            ${data.timeline.slice(0, 5).map(item => `
+                                <div class="timeline-item">
+                                    <div class="timeline-date">${new Date(item.timestamp).toLocaleString()} | ${item.channel}</div>
+                                    <div class="timeline-content">
+                                        <strong>${item.type}:</strong> ${item.message}
+                                        ${item.sentiment ? ` | Sentiment: ${item.sentiment}` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p style="color: #718096; font-style: italic;">No activity recorded yet</p>'}
+                    
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #718096; font-size: 13px;">
+                        <strong>Contact:</strong> ${customer.mobile} | ${customer.email}
+                    </div>
+                `;
+                
+                document.getElementById('modalContent').innerHTML = html;
+            } catch (error) {
+                console.error('Error loading customer details:', error);
+                document.getElementById('modalContent').innerHTML = 
+                    '<div class="empty-state">Error loading customer details</div>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('customerModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('customerModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Load data on page load
+        loadJourneyData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadJourneyData, 30000);
+    </script>
+</body>
+</html>

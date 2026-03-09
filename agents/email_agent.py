@@ -2,13 +2,19 @@
 agents/email_agent.py
 Email Agent — Layer 3 Agentic AI Layer
 Personalized renewal emails, 3 nudges per segment, loyalty offers, escalation rules.
+
+NOW WITH REAL SMTP EMAIL SENDING! 📧
 """
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from services.llm import generate_message
 from services.rag_retrieval import retrieve_policy_context
+from services.email_service import get_email_service
 from data.semantic_memory import add_turn, record_offer_shown
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,6 +28,7 @@ class EmailResult:
     offer_ids: list[str]
     sent_at: datetime
     escalate: bool = False
+    smtp_result: dict = None  # NEW: SMTP delivery status
 
 
 def _build_subject(context: dict, nudge_number: int, tone: str) -> str:
@@ -74,7 +81,11 @@ def send_email(
     nudge_number: int = 1,
     offer_ids: list[str] = None,
 ) -> EmailResult:
-    """Generate and 'send' (stub) a renewal email."""
+    """
+    Generate and ACTUALLY SEND a renewal email via SMTP
+    
+    This now sends REAL emails using the configured SMTP service!
+    """
     subject = _build_subject(context, nudge_number, tone)
     body = _build_body(context, nudge_number, tone, "email")
 
@@ -86,6 +97,44 @@ def send_email(
         record_offer_shown(policy_id, context["offer_text"][:50])
 
     escalate = nudge_number >= 3 and context.get("days_left", 30) <= 3
+    
+    # ═══════════════════════════════════════════════════════════════
+    # NEW: ACTUALLY SEND EMAIL VIA SMTP! 🚀
+    # ═══════════════════════════════════════════════════════════════
+    email_service = get_email_service()
+    
+    # Prepare offers list for template
+    offers = []
+    if context.get("discount_pct", 0) > 0:
+        offers.append(f"{context['discount_pct']}% No-Claim Discount")
+    if context.get("autopay_cashback", 0) > 0:
+        offers.append(f"₹{context['autopay_cashback']} AutoPay Cashback")
+    if not offers:
+        offers = ["Loyalty Bonus: 5% extra coverage", "24/7 Priority Support"]
+    
+    # Send via SMTP using beautiful HTML template
+    smtp_result = email_service.send_renewal_email(
+        customer_name=context.get("name", "Customer"),
+        customer_email=email,
+        policy_number=policy_id,
+        policy_type=context.get("policy_type", "Life Insurance Policy"),
+        premium_amount=context.get("premium", 0),
+        due_date=context.get("renewal_date", "Soon"),
+        sum_assured=context.get("sum_assured", 0),
+        offers=offers,
+        payment_link=f"https://pay.suraksha.in/{policy_id}",
+        language=context.get("language", "en")
+    )
+    
+    # Log result
+    if smtp_result.get('success'):
+        logger.info(f"✅ Email DELIVERED to {email} via {smtp_result.get('provider', 'SMTP')}")
+        print(f"  [EmailAgent] ✉️  SENT nudge #{nudge_number} to {email} | Subject: {subject[:60]}")
+        print(f"  [EmailAgent] 🎯 Message ID: {smtp_result.get('message_id')}")
+    else:
+        logger.error(f"❌ Email FAILED to {email}: {smtp_result.get('error')}")
+        print(f"  [EmailAgent] ❌ FAILED to {email}: {smtp_result.get('message')}")
+    # ═══════════════════════════════════════════════════════════════
 
     result = EmailResult(
         policy_id=policy_id,
@@ -97,6 +146,7 @@ def send_email(
         offer_ids=offer_ids or [],
         sent_at=datetime.now(),
         escalate=escalate,
+        smtp_result=smtp_result  # Include SMTP delivery status
     )
-    print(f"  [EmailAgent] ✉️  Sent nudge #{nudge_number} to {email} | Subject: {subject[:60]}")
+    
     return result

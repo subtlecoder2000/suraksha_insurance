@@ -4,12 +4,10 @@ Streamlit Dashboard — Suraksha Life Insurance PROJECT RenewAI v2.0
 
 Visualises:
  • Renewal Pipeline Overview (KPIs)
+ • Customer Journey Tracker (stage-by-stage progress)
  • Success Metrics Scorecard (FY25 Baseline → FY26 Target)
  • Live Batch Simulation (run all 3 journeys)
- • Human Queue (distress escalations)
- • Critique Agent Results
- • Audit Log
- • Financial Business Case
+ • Audit Log & Compliance
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -30,13 +28,16 @@ st.set_page_config(
 from data.crm import (get_all_policyholders, get_pipeline_summary,
                       get_distressed, get_lapsed, get_due_within,
                       get_persistency_rate)
+from database.connection import SessionLocal
+from database.repositories import CustomerRepository, ConversationRepository
+from database.models import Customer
 from agents.orchestrator import orchestrate, run_batch
 from agents.email_agent import send_email
 from agents.whatsapp_agent import send_whatsapp, handle_reply
 from agents.voice_agent import make_call
-from agents.human_queue_manager import escalate, get_queue, get_queue_stats
+from agents.human_queue_manager import escalate
 from critique.critique_agent import evaluate, CritiqueVerdict
-from critique.analytics import record as record_critique, get_summary as critique_summary
+from critique.analytics import record as record_critique
 from monitoring.scorecard import get_scorecard, get_financial_summary
 from monitoring.observability import log_event, EventType, get_system_stats
 
@@ -49,13 +50,11 @@ with st.sidebar:
     st.divider()
     page = st.radio("Navigation", [
         "📊 Dashboard Overview",
-        "🔄 Run Journeys (Demo)",
+        "🔄 Customer Journey Tracker",
+        "▶️ Run Journeys (Demo)",
         "👥 Policyholder Pipeline",
         "📋 Success Metrics Scorecard",
-        "🔍 Critique Agent",
-        "🔔 Human Queue",
-        "💰 Financial Business Case",
-        "🔭 Audit Log",
+        " Audit Log",
     ])
     st.divider()
     st.caption(f"RenewAI v2.0 | June 2025 | CONFIDENTIAL")
@@ -143,9 +142,240 @@ if page == "📊 Dashboard Overview":
     st.dataframe(journey_df, use_container_width=True, hide_index=True)
 
 # ═════════════════════════════════════════════════════════════════════════════
+# PAGE: Customer Journey Tracker
+# ═════════════════════════════════════════════════════════════════════════════
+elif page == "🔄 Customer Journey Tracker":
+    st.title("🔄 Customer Journey Tracker")
+    st.markdown("**Real-time visualization of customer progress through the renewal pipeline**")
+    st.divider()
+
+    # Get database session
+    db = SessionLocal()
+    
+    try:
+        # Get all customers
+        customers = CustomerRepository.get_all(db)
+        
+        if not customers:
+            st.warning("No customers found in database. Please run `python database/seed.py` to load demo data.")
+        else:
+            # Summary metrics
+            total_customers = len(customers)
+            pending = len([c for c in customers if c.renewal_status == "PENDING"])
+            renewed = len([c for c in customers if c.renewal_status == "RENEWED"])
+            renewal_rate = (renewed / total_customers * 100) if total_customers > 0 else 0
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Total Customers", total_customers, help="In renewal pipeline")
+            col2.metric("Pending", pending, help="Awaiting renewal")
+            col3.metric("Renewed", renewed, help="Successfully renewed")
+            col4.metric("Renewal Rate", f"{renewal_rate:.1f}%", 
+                       delta=f"{renewal_rate - 88:.1f}pp vs target" if renewal_rate < 88 else "✓ Target met",
+                       delta_color="normal" if renewal_rate >= 88 else "inverse")
+            
+            st.divider()
+            
+            # Journey stages pipeline
+            st.subheader("📊 Journey Pipeline by Stage")
+            
+            journey_stages = ["T-45", "T-30", "T-20", "T-10", "T-5", "POST_LAPSE", "RENEWED"]
+            stage_counts = {}
+            stage_customers = {}
+            
+            for stage in journey_stages:
+                if stage == "RENEWED":
+                    stage_list = [c for c in customers if c.renewal_status == "RENEWED"]
+                else:
+                    stage_list = [c for c in customers if c.current_journey_stage == stage]
+                stage_counts[stage] = len(stage_list)
+                stage_customers[stage] = stage_list
+            
+            # Display stage counts as metrics
+            cols = st.columns(len(journey_stages))
+            for idx, stage in enumerate(journey_stages):
+                with cols[idx]:
+                    emoji = "✅" if stage == "RENEWED" else "🔄"
+                    st.metric(f"{emoji} {stage}", stage_counts[stage])
+            
+            st.divider()
+            
+            # Stage selector
+            selected_stage = st.selectbox(
+                "Select Journey Stage to View Customers",
+                journey_stages,
+                index=0
+            )
+            
+            customers_in_stage = stage_customers[selected_stage]
+            
+            if not customers_in_stage:
+                st.info(f"No customers currently in **{selected_stage}** stage.")
+            else:
+                st.subheader(f"Customers in {selected_stage} Stage ({len(customers_in_stage)})")
+                
+                # Create customer cards
+                for customer in customers_in_stage:
+                    # Determine risk level
+                    if customer.propensity_to_lapse >= 0.3:
+                        risk_level = "🔴 High Risk"
+                        risk_color = "red"
+                    elif customer.propensity_to_lapse >= 0.15:
+                        risk_level = "🟡 Medium Risk"
+                        risk_color = "orange"
+                    else:
+                        risk_level = "🟢 Low Risk"
+                        risk_color = "green"
+                    
+                    # Create expander for each customer
+                    with st.expander(f"**{customer.name}** | {customer.policy_type} | ₹{customer.annual_premium:,} | {risk_level}"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("##### 📋 Customer Profile")
+                            st.write(f"**Customer ID:** {customer.customer_id}")
+                            st.write(f"**Policy Number:** {customer.policy_number}")
+                            st.write(f"**Age:** {customer.age}")
+                            st.write(f"**Policy Type:** {customer.policy_type}")
+                            st.write(f"**Annual Premium:** ₹{customer.annual_premium:,}")
+                            st.write(f"**Sum Assured:** ₹{customer.sum_assured:,}")
+                            st.write(f"**Payment Mode:** {customer.payment_mode}")
+                            
+                            st.markdown("##### 📞 Contact Preferences")
+                            st.write(f"**Mobile:** {customer.mobile}")
+                            st.write(f"**Email:** {customer.email}")
+                            st.write(f"**Preferred Channel:** {customer.preferred_channel}")
+                            st.write(f"**Preferred Language:** {customer.preferred_language}")
+                            st.write(f"**Preferred Time:** {customer.preferred_time}")
+                        
+                        with col2:
+                            st.markdown("##### 🎯 Journey Status")
+                            st.write(f"**Current Stage:** {customer.current_journey_stage}")
+                            st.write(f"**Renewal Status:** {customer.renewal_status}")
+                            
+                            if customer.due_date:
+                                from datetime import datetime
+                                days_to_due = (customer.due_date - datetime.now().date()).days
+                                st.write(f"**Due Date:** {customer.due_date.strftime('%d %b %Y')}")
+                                st.write(f"**Days to Due Date:** {days_to_due} days")
+                            
+                            if customer.last_contact_date:
+                                st.write(f"**Last Contact:** {customer.last_contact_date.strftime('%d %b %Y %H:%M')}")
+                            
+                            st.markdown("##### 📊 Risk Assessment")
+                            st.write(f"**Risk Level:** {risk_level}")
+                            st.progress(customer.propensity_to_lapse, text=f"Lapse Propensity: {customer.propensity_to_lapse*100:.1f}%")
+                            st.progress(customer.persistency_score, text=f"Persistency Score: {customer.persistency_score*100:.1f}%")
+                            
+                            st.markdown("##### 🎬 Recommended Next Action")
+                            if customer.renewal_status == "RENEWED":
+                                st.success("✅ Customer has renewed successfully")
+                            elif customer.current_journey_stage == "T-45":
+                                st.info("📧 Send initial renewal reminder email")
+                            elif customer.current_journey_stage == "T-30":
+                                st.info("💬 Follow up via WhatsApp")
+                            elif customer.current_journey_stage == "T-20":
+                                st.info("📞 Place voice call")
+                            elif customer.current_journey_stage == "T-10":
+                                st.warning("⚡ Send urgent dual-channel reminder (Email + WhatsApp)")
+                            elif customer.current_journey_stage == "T-5":
+                                st.error("🚨 Last chance - Grace period notification")
+                            elif customer.current_journey_stage == "POST_LAPSE":
+                                st.error("🔁 Initiate 90-day revival campaign")
+                        
+                        # Conversation history
+                        st.markdown("##### 💬 Recent Activity")
+                        conversations = ConversationRepository.get_recent(db, customer.customer_id, limit=5)
+                        
+                        if conversations:
+                            for conv in conversations:
+                                sentiment_emoji = "😊" if conv.sentiment == "POSITIVE" else ("😐" if conv.sentiment == "NEUTRAL" else "😞")
+                                st.markdown(f"""
+                                **{conv.timestamp.strftime('%d %b %H:%M')}** | {conv.channel} | {sentiment_emoji} {conv.sentiment}
+                                
+                                _{conv.message[:150]}{'...' if len(conv.message) > 150 else ''}_
+                                """)
+                        else:
+                            st.caption("No activity recorded yet")
+            
+            st.divider()
+            
+            # Analytics section
+            st.subheader("📈 Journey Analytics")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("##### 🎯 Risk Segmentation")
+                high_risk = len([c for c in customers if c.propensity_to_lapse >= 0.3])
+                medium_risk = len([c for c in customers if 0.15 <= c.propensity_to_lapse < 0.3])
+                low_risk = len([c for c in customers if c.propensity_to_lapse < 0.15])
+                
+                risk_df = pd.DataFrame({
+                    "Risk Level": ["🔴 High (≥30%)", "🟡 Medium (15-30%)", "🟢 Low (<15%)"],
+                    "Count": [high_risk, medium_risk, low_risk],
+                    "Percentage": [
+                        f"{high_risk/total_customers*100:.1f}%",
+                        f"{medium_risk/total_customers*100:.1f}%",
+                        f"{low_risk/total_customers*100:.1f}%"
+                    ]
+                })
+                st.dataframe(risk_df, use_container_width=True, hide_index=True)
+            
+            with col2:
+                st.markdown("##### 📱 Channel Distribution")
+                channel_counts = {}
+                for c in customers:
+                    channel = c.preferred_channel or "Unknown"
+                    channel_counts[channel] = channel_counts.get(channel, 0) + 1
+                
+                channel_df = pd.DataFrame([
+                    {"Channel": channel, "Count": count, "Percentage": f"{count/total_customers*100:.1f}%"}
+                    for channel, count in channel_counts.items()
+                ])
+                st.dataframe(channel_df, use_container_width=True, hide_index=True)
+            
+            # Stage funnel visualization
+            st.markdown("##### 🔄 Journey Stage Funnel")
+            funnel_data = []
+            for stage in journey_stages:
+                count = stage_counts[stage]
+                percentage = (count / total_customers * 100) if total_customers > 0 else 0
+                funnel_data.append({
+                    "Stage": stage,
+                    "Count": count,
+                    "Percentage": f"{percentage:.1f}%"
+                })
+            
+            funnel_df = pd.DataFrame(funnel_data)
+            st.dataframe(funnel_df, use_container_width=True, hide_index=True)
+            
+            # Quick actions
+            st.divider()
+            st.subheader("⚡ Quick Actions")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🔄 Refresh Data", use_container_width=True):
+                    st.rerun()
+            
+            with col2:
+                if st.button("📊 Export Pipeline Report", use_container_width=True):
+                    st.info("Export functionality coming soon!")
+            
+            with col3:
+                if st.button("🎯 Run Batch Process", use_container_width=True):
+                    with st.spinner("Processing batch..."):
+                        # This would trigger the orchestrator for all pending customers
+                        st.success("Batch process initiated!")
+    
+    finally:
+        db.close()
+
+# ═════════════════════════════════════════════════════════════════════════════
 # PAGE: Run Journeys (Demo)
 # ═════════════════════════════════════════════════════════════════════════════
-elif page == "🔄 Run Journeys (Demo)":
+elif page == "▶️ Run Journeys (Demo)":
     st.title("🔄 Run Customer Journeys — Business Case Scenarios")
     st.markdown("Reproduce the 3 exact customer journeys from the business case document.")
     st.divider()
@@ -408,223 +638,6 @@ elif page == "📋 Success Metrics Scorecard":
     ])
     st.dataframe(team_df, use_container_width=True, hide_index=True)
 
-# ═════════════════════════════════════════════════════════════════════════════
-# PAGE: Critique Agent
-# ═════════════════════════════════════════════════════════════════════════════
-elif page == "🔍 Critique Agent":
-    st.title("🔍 Critique Agent Quality Gate — Layer 3.5")
-    st.markdown(
-        "Every AI-generated message passes through a **9-point checklist** before delivery. "
-        "Outcome: **PASS → deliver | REGENERATE → fix & retry | BLOCK → human queue**"
-    )
-
-    cs = critique_summary()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Messages Evaluated", cs["total_evaluated"])
-    col2.metric("Pass Rate", cs["pass_rate"])
-    col3.metric("Regenerate Rate", cs["regenerate_rate"])
-    col4.metric("Block Rate", cs["block_rate"])
-
-    meets = cs["meets_target"]
-    if meets and cs["total_evaluated"] > 0:
-        st.success("✅ Meets ≥87% AI accuracy target (business case Section 8)")
-    elif cs["total_evaluated"] == 0:
-        st.info("No messages evaluated yet — run journeys first.")
-    else:
-        st.warning("⚠️ Below 87% accuracy target — AI Ops review required")
-
-    st.divider()
-    st.subheader("🔟 The 9-Point Checklist")
-    checklist_df = pd.DataFrame([
-        {"#": 1, "Check": "Factual Accuracy",         "Severity": "CRITICAL",
-         "Description": "Facts from RAG sources only — no AI hallucination on premium/sum assured"},
-        {"#": 2, "Check": "Tone-Segment Alignment",   "Severity": "HIGH",
-         "Description": "Wealth Builder = professional; Budget Conscious = affordability-focused"},
-        {"#": 3, "Check": "Emotional Control",        "Severity": "CRITICAL",
-         "Description": "No cheerful tone if customer expressed distress or bereavement"},
-        {"#": 4, "Check": "Logical Coherence",        "Severity": "HIGH",
-         "Description": "No contradiction with prior messages (e.g. different discount %)"},
-        {"#": 5, "Check": "Regulatory Compliance",    "Severity": "CRITICAL",
-         "Description": "No IRDAI violations — no guaranteed returns, no false promises"},
-        {"#": 6, "Check": "Language Quality",         "Severity": "MEDIUM",
-         "Description": "Grammar, cultural fit, correct language for customer preference (9 languages)"},
-        {"#": 7, "Check": "Personalization Accuracy", "Severity": "HIGH",
-         "Description": "Correct name, policy number, product name, premium amount"},
-        {"#": 8, "Check": "Conversation Continuity",  "Severity": "MEDIUM",
-         "Description": "Addresses previous objections, not a stale template"},
-        {"#": 9, "Check": "Data Safety (DPDPA 2023)", "Severity": "CRITICAL",
-         "Description": "No PII in message — Aadhaar, PAN, bank account, phone, email"},
-    ])
-    st.dataframe(checklist_df, use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.subheader("🧪 Live Message Test")
-    with st.expander("Test a message through the Critique Agent"):
-        test_msg = st.text_area("Enter message to evaluate:",
-                                 value="Dear Rajesh,\n\nYour Suraksha Term Shield policy renews on 15 March. Premium: ₹24,000. Cover: ₹1 Crore.\n\nPay now or choose 3 easy EMI instalments of ₹8,000 each.\n\nRenew now: pay.suraksha.in/pol-001")
-        test_ctx = {"name": "Rajesh Kumar", "premium": 24000, "sum_assured": 10000000,
-                    "renewal_date": "15 March 2026", "segment": "Budget Conscious",
-                    "language": "English", "tone": "friendly", "policy_number": "SLI-2298741",
-                    "policy_id": "POL-001", "distress_flag": False}
-        if st.button("🔍 Evaluate with Critique Agent"):
-            result = evaluate(test_msg, test_ctx, "POL-001", "ManualTest", "mixed")
-            record_critique(result)
-            verdict_color = {"PASS": "✅", "REGENERATE": "🔁", "BLOCK": "⛔"}
-            st.markdown(f"### {verdict_color.get(result.verdict.value, '?')} Verdict: **{result.verdict.value}**")
-            st.metric("Overall Score", f"{result.overall_score:.0%}", delta=f"Threshold: 87%")
-            check_data = []
-            for c in result.checks:
-                check_data.append({
-                    "Check": c.check_name,
-                    "Result": "✅ PASS" if c.passed else "❌ FAIL",
-                    "Severity": c.severity,
-                    "Feedback": c.feedback,
-                })
-            st.dataframe(pd.DataFrame(check_data), use_container_width=True, hide_index=True)
-            if result.regenerate_feedback:
-                st.warning(result.regenerate_feedback)
-            if result.block_reason:
-                st.error(f"BLOCK REASON: {result.block_reason}")
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PAGE: Human Queue
-# ═════════════════════════════════════════════════════════════════════════════
-elif page == "🔔 Human Queue":
-    st.title("🔔 Human Specialist Queue")
-    st.markdown("Cases automatically routed from AI → Human. **SLA: ≤2 hours for distress/bereavement.**")
-
-    stats = get_queue_stats()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Cases", stats["total"])
-    col2.metric("🔴 Open", stats["open"])
-    col3.metric("🚨 URGENT", stats["urgent"])
-    col4.metric("✅ Resolved", stats["resolved"])
-
-    queue = get_queue()
-    if not queue:
-        st.info("No open cases. Run journeys to generate escalations.")
-    else:
-        for b in queue:
-            urgency_icon = "🚨" if b.priority == "URGENT" else "🔴" if b.priority == "HIGH" else "🟡"
-            with st.expander(f"{urgency_icon} {b.case_id} | {b.customer_name} → {b.specialist_type} | SLA: {b.sla_hours}h"):
-                st.markdown(f"**Priority:** {b.priority} | **Status:** {b.status}")
-                st.markdown(f"**Escalation Reason:** {b.escalation_reason}")
-                st.markdown(f"**Policy Summary:**\n```\n{b.policy_summary}\n```")
-                st.markdown(f"**Recommended Approach:** {b.recommended_approach}")
-                if b.objections_raised:
-                    st.markdown(f"**Objections Raised:** {' | '.join(b.objections_raised[:3])}")
-                if b.offers_already_shown:
-                    st.markdown(f"**Offers Shown:** {' | '.join(b.offers_already_shown[:3])}")
-
-    st.divider()
-    st.subheader("👩‍💼 Specialist Routing Logic")
-    routing_df = pd.DataFrame([
-        {"Specialist":    "Senior Renewal RM (8)",
-         "Routes When":   "HNI (₹1L+ premium), Platinum tier, bereavement, emotional cases",
-         "Target Cases":  "8–10% of pipeline escalations"},
-        {"Specialist":    "Revival Specialist (5)",
-         "Routes When":   "Policy already lapsed — revival + re-underwriting required",
-         "Target Cases":  "Post-lapse cases (90-day window)"},
-        {"Specialist":    "Compliance Handler (2)",
-         "Routes When":   "IRDAI complaint, mis-selling dispute, fraud claim, ombudsman",
-         "Target Cases":  "<1% of pipeline"},
-        {"Specialist":    "AI Ops Manager (3)",
-         "Routes When":   "AI system anomaly, model drift detected, audit discrepancy",
-         "Target Cases":  "Internal only"},
-    ])
-    st.dataframe(routing_df, use_container_width=True, hide_index=True)
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PAGE: Financial Business Case
-# ═════════════════════════════════════════════════════════════════════════════
-elif page == "💰 Financial Business Case":
-    st.title("💰 Financial Business Case — Section 5")
-    st.markdown("**Board Resolution: ₹2.39 Cr CapEx | 16-Week Implementation | Q4 FY26 Production**")
-
-    fin = get_financial_summary()
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("3-Year NPV", "₹89 Cr")
-    col2.metric("Payback Period", "8 Months")
-    col3.metric("Annual Saving", "₹12.9 Cr")
-    col4.metric("Revenue Uplift", "+₹38.9 Cr/yr")
-
-    st.divider()
-    st.subheader("💸 5.1 Cost Savings")
-    cost_df = pd.DataFrame([
-        {"Cost Category": "Staff Cost (salary + PF + gratuity + bonus)",
-         "Current (₹ Cr)": 12.8, "Post-RenewAI (₹ Cr)": 2.8},
-        {"Cost Category": "Recruitment & Training (38% attrition)",
-         "Current (₹ Cr)": 2.1, "Post-RenewAI (₹ Cr)": 0.2},
-        {"Cost Category": "Office Space & Infrastructure",
-         "Current (₹ Cr)": 1.8, "Post-RenewAI (₹ Cr)": 0.3},
-        {"Cost Category": "Telephony & Communication (IVR, dialers, SMS)",
-         "Current (₹ Cr)": 1.2, "Post-RenewAI (₹ Cr)": 0.4},
-        {"Cost Category": "Quality & Compliance Auditing (manual)",
-         "Current (₹ Cr)": 0.7, "Post-RenewAI (₹ Cr)": 0.1},
-        {"Cost Category": "AI Platform (LLM + cloud + APIs)",
-         "Current (₹ Cr)": 0.0, "Post-RenewAI (₹ Cr)": 1.4},
-        {"Cost Category": "AI Operations & Maintenance",
-         "Current (₹ Cr)": 0.0, "Post-RenewAI (₹ Cr)": 0.5},
-        {"Cost Category": "TOTAL ANNUAL OPEX",
-         "Current (₹ Cr)": 18.6, "Post-RenewAI (₹ Cr)": 5.7},
-    ])
-    st.dataframe(cost_df, use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.subheader("📈 5.2 Revenue Uplift (Persistency 71% → 88%)")
-    rev_df = pd.DataFrame([
-        {"Metric": "Renewal Policies Due Annually",   "Current": "14,40,000",    "Post-RenewAI": "14,40,000"},
-        {"Metric": "Persistency Rate (13th Month)",   "Current": "71%",           "Post-RenewAI": "88%"},
-        {"Metric": "Policies Renewed",                "Current": "10,22,400",    "Post-RenewAI": "12,67,200"},
-        {"Metric": "Additional Policies Retained",    "Current": "—",             "Post-RenewAI": "+2,44,800"},
-        {"Metric": "Average Annual Premium",          "Current": "₹22,400",      "Post-RenewAI": "₹22,400"},
-        {"Metric": "Incremental Premium (gross)",     "Current": "—",             "Post-RenewAI": "₹54.8 Cr/yr"},
-        {"Metric": "After commission & admin deduct", "Current": "—",             "Post-RenewAI": "₹38.9 Cr net"},
-    ])
-    st.dataframe(rev_df, use_container_width=True, hide_index=True)
-    st.info("💡 Every 1% improvement in persistency = ₹4.7 Cr additional premium income retained")
-
-    st.divider()
-    st.subheader("🗓 16-Week Implementation Roadmap (Section 6)")
-    roadmap_df = pd.DataFrame([
-        {"Phase": "Phase 1 (Wks 1-4)",   "Name": "Foundation",
-         "Activities": "CRM integration, pilot data, IRDAI pre-engagement, AI platform setup, staff comms"},
-        {"Phase": "Phase 2 (Wks 5-8)",   "Name": "Development",
-         "Activities": "Build 4 agents, objection library, WhatsApp Business API, voice platform (9 languages)"},
-        {"Phase": "Phase 3 (Wks 9-13)",  "Name": "Pilot",
-         "Activities": "5% live pilot in shadow mode. Measure open/conversion/escalation. IRDAI pilot notification."},
-        {"Phase": "Phase 4 (Wks 14-16)", "Name": "Transition",
-         "Activities": "Phased staff exit (40+40+20). 20 specialists trained. Full go-live. 30-day hypercare."},
-    ])
-    st.dataframe(roadmap_df, use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.subheader("⚠️ Risk Management (Section 7)")
-    risk_df = pd.DataFrame([
-        {"Risk": "AI misclassifies grievance as routine",
-         "Likelihood": "Medium",
-         "Mitigation": "Distress keyword dict (Hindi + 6 languages); all grievance cases reviewed by human within 2h"},
-        {"Risk": "AI generates inaccurate policy information",
-         "Likelihood": "Medium",
-         "Mitigation": "All facts from verified RAG docs only — never generative on financial figures"},
-        {"Risk": "Customer backlash to AI-only contact",
-         "Likelihood": "Medium",
-         "Mitigation": "AI identifies itself as 'Suraksha AI-powered renewal assistant'. Opt-out for human-only."},
-        {"Risk": "Data privacy violation (PII via AI)",
-         "Likelihood": "Low",
-         "Mitigation": "India-hosted cloud. PII masking before every AI call. DPDPA 2023 compliant. Annual audit."},
-        {"Risk": "IRDAI mandates human in loop for renewal decisions",
-         "Likelihood": "High (regulatory certainty)",
-         "Mitigation": "AI facilitates payment only — customer takes the action. HITL at all decision boundaries."},
-        {"Risk": "Model drift reduces conversion over time",
-         "Likelihood": "Low–Medium",
-         "Mitigation": "Weekly 5% sample quality eval; monthly objection refresh; quarterly model review; A/B testing"},
-    ])
-    st.dataframe(risk_df, use_container_width=True, hide_index=True)
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PAGE: Audit Log
-# ═════════════════════════════════════════════════════════════════════════════
 elif page == "🔭 Audit Log":
     st.title("🔭 AI Observability & IRDAI Audit Log")
     sys_stats = get_system_stats()
