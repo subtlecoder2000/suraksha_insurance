@@ -52,13 +52,13 @@ OBJECTION_LIBRARY: list[ObjectionEntry] = [
 
     # ── TRUST / COMPANY ───────────────────────────────────────────────────────
     ObjectionEntry("OBJ-009", "Trust", "I don't trust insurance companies for claims.",
-        "Your concern is valid and very common. Surekha Insurance has a 98.5% claim settlement ratio — one of the highest in India, as published by IRDAI. We settled 2.4 lakh claims last year. Shall I share the IRDAI-published claim report?",
+        "Your concern is valid and very common. Suraksha Insurance has a 98.5% claim settlement ratio — one of the highest in India, as published by IRDAI. We settled 2.4 lakh claims last year. Shall I share the IRDAI-published claim report?",
         "English", ["Budget Conscious", "Senior Citizen", "Young Professional"], ["claim_ratio", "trust"]),
     ObjectionEntry("OBJ-010", "Trust", "Claim mein bahut problem hoti hai.",
-        "Yeh ek common chinta hai. Surekha Insurance ka IRDAI-published claim settlement ratio 98.5% hai — India mein sabse zyada mein se ek. Pichle saal humne 2.4 lakh claims settle kiye. Kya main IRDAI report share karoon?",
+        "Yeh ek common chinta hai. Suraksha Insurance ka IRDAI-published claim settlement ratio 98.5% hai — India mein sabse zyada mein se ek. Pichle saal humne 2.4 lakh claims settle kiye. Kya main IRDAI report share karoon?",
         "Hindi", ["Budget Conscious", "Senior Citizen"], ["claim_ratio", "trust"]),
     ObjectionEntry("OBJ-011", "Trust", "Company kaisa hai, reliable hai?",
-        "Surekha Insurance 25 saalon se India mein hai, 4.8 million policyholders ke saath. Hum IRDAI regulated hain, Tech Framework 2024 compliant hain. Aapka paisa 100% safe hai.",
+        "Suraksha Insurance 25 saalon se India mein hai, 4.8 million policyholders ke saath. Hum IRDAI regulated hain, Tech Framework 2024 compliant hain. Aapka paisa 100% safe hai.",
         "Hindi", ["Budget Conscious", "Young Professional"], ["company_credibility"]),
 
     # ── TIMING / DELAY ────────────────────────────────────────────────────────

@@ -89,10 +89,10 @@ def check_tone_segment(message: str, context: dict) -> CheckResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHECK 3: Emotional Control
-# Business case: "Emotional Control — no cheerful tone if customer expressed distress"
+# CHECK 3: Emotional Context (Emotional Control)
+# Business case: "Emotional Context — no cheerful tone if customer expressed distress"
 # ─────────────────────────────────────────────────────────────────────────────
-def check_emotional_control(message: str, context: dict) -> CheckResult:
+def check_emotional_context(message: str, context: dict) -> CheckResult:
     is_distressed = (
         context.get("sentiment") == "distressed"
         or context.get("distress_flag", False)
@@ -107,7 +107,7 @@ def check_emotional_control(message: str, context: dict) -> CheckResult:
     passed = not found_cheerful
     return CheckResult(
         check_number=3,
-        check_name="Emotional Control",
+        check_name="Emotional Context",
         passed=passed,
         score=0.0 if found_cheerful else 1.0,
         feedback=(
@@ -149,25 +149,36 @@ def check_logical_coherence(message: str, prior_messages: list[str]) -> CheckRes
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHECK 5: Regulatory Compliance
+# CHECK 5: Regulatory Compliance (including DPDPA 2023 / PII Safety)
 # Business case: "Regulatory Guidance — no false promise, no IRDAI guideline violations"
 # ─────────────────────────────────────────────────────────────────────────────
 def check_regulatory_compliance(message: str) -> CheckResult:
     violations = check_message_compliance(message)
-    critical = [v for v in violations if v["severity"] == "Critical"]
+    critical_v = [v for v in violations if v["severity"] == "Critical"]
 
-    passed = not violations
+    # Integrate PII Check here (from former check 9)
+    pii_found = []
+    for ptype, pat in _PII_PATTERNS.items():
+        if pat.search(message):
+            pii_found.append(ptype)
+
+    pii_violations = [{"title": f"PII exposed: {ptype}", "severity": "Critical"} for ptype in pii_found]
+
+    all_violations = violations + pii_violations
+    passed = not all_violations
+    
     feedback = (
-        f"IRDAI violations: {'; '.join(v['title'] + ' (triggered by: ' + v['triggered_by'] + ')' for v in violations)}"
-        if violations else "No IRDAI/regulatory violations detected."
+        f"Violations: {'; '.join(v['title'] for v in all_violations)}"
+        if all_violations else "Regulatory and DPDPA/PII compliance verified."
     )
+
     return CheckResult(
         check_number=5,
         check_name="Regulatory Compliance",
         passed=passed,
-        score=0.0 if critical else (0.5 if violations else 1.0),
+        score=0.0 if (critical_v or pii_found) else (0.5 if violations else 1.0),
         feedback=feedback,
-        severity="CRITICAL" if critical else "HIGH",
+        severity="CRITICAL" if (critical_v or pii_found) else "HIGH",
     )
 
 
@@ -240,10 +251,10 @@ def check_personalization(message: str, context: dict) -> CheckResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHECK 8: Conversation Continuity
-# Business case: "Conversation-Continuity — respects actual context, not stale template"
+# CHECK 8: Conversation Completeness (Continuity)
+# Business case: "Conversation Completeness — response answers customer's actual question"
 # ─────────────────────────────────────────────────────────────────────────────
-def check_conversation_continuity(message: str, context: dict, prior_messages: list[str]) -> CheckResult:
+def check_conversation_completeness(message: str, context: dict, prior_messages: list[str]) -> CheckResult:
     issues = []
 
     # If customer raised an objection in prior messages, this message should address it
@@ -251,43 +262,54 @@ def check_conversation_continuity(message: str, context: dict, prior_messages: l
     if objections_raised and prior_messages:
         # Check if response acknowledges the objection context
         objection_addressed = any(
-            any(word in message.lower() for word in ["understand", "concern", "option", "solution"])
-        for _ in [True])  # simplified check
+            any(word in message.lower() for word in ["understand", "concern", "option", "solution", "help"])
+            for _ in [True])
         if not objection_addressed:
             issues.append("Customer raised objections in prior turn but response ignores them")
 
     passed = not issues
     return CheckResult(
         check_number=8,
-        check_name="Conversation Continuity",
+        check_name="Conversation Completeness",
         passed=passed,
         score=0.0 if issues else 1.0,
-        feedback="; ".join(issues) if issues else "Response consistent with conversation context.",
+        feedback="; ".join(issues) if issues else "Response addresses customer's conversational context.",
         severity="MEDIUM",
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CHECK 9: Data Safety (PII / DPDPA 2023)
-# Business case: "Data Safety — no PII/sensitive data exposure, DPDPA compliant"
+# CHECK 9: Offer Validity
+# Business case: "Offer Validity — loyalty discount/offer correctly applied & IRDAI compliant"
 # ─────────────────────────────────────────────────────────────────────────────
-def check_data_safety(message: str) -> CheckResult:
-    pii_found = []
-    for ptype, pat in _PII_PATTERNS.items():
-        if pat.search(message):
-            pii_found.append(ptype)
+def check_offer_validity(message: str, context: dict) -> CheckResult:
+    """Validate that mentioned offers/discounts match the customer's eligible offers."""
+    issues = []
+    
+    # Extract mentioned discounts in message (e.g. "10% discount", "₹200 cashback")
+    mentioned_pcts = re.findall(r'(\d+)%\s(?:discount|off)', message.lower())
+    mentioned_cashback = re.findall(r'₹(\d+)\s(?:cashback)', message.lower())
+    
+    # Get eligibility from context
+    eligible_discount = context.get("discount_pct", 0)
+    offer_text = context.get("offer_text", "")
+    
+    if mentioned_pcts:
+        # Check if at least one mentioned pct matches eligible discount
+        # Note: eligible_discount is like 0.10 for 10%
+        target_pct_str = str(int(eligible_discount * 100))
+        if not any(target_pct_str in p for p in mentioned_pcts) and eligible_discount > 0:
+            issues.append(f"Offer mismatch: Message mentions {mentioned_pcts}% but customer is only eligible for {target_pct_str}%")
+        elif not eligible_discount and mentioned_pcts:
+             issues.append(f"Invalid offer: Message mentions {mentioned_pcts}% discount but customer is not eligible for any NCD")
 
-    # Also check for bank account numbers or IFSC
-    passed = not pii_found
+    passed = not issues
     return CheckResult(
         check_number=9,
-        check_name="Data Safety (PII / DPDPA 2023)",
+        check_name="Offer Validity",
         passed=passed,
-        score=0.0 if pii_found else 1.0,
-        feedback=(
-            f"PII detected in message ({', '.join(pii_found)}) — must be masked before delivery (DPDPA 2023)"
-            if pii_found else "No PII exposure detected. DPDPA 2023 compliant."
-        ),
+        score=0.0 if issues else 1.0,
+        feedback="; ".join(issues) if issues else "Loyalty offers and discounts correctly applied.",
         severity="CRITICAL",
     )
 
@@ -303,11 +325,11 @@ def run_all_checks(message: str, context: dict,
     return [
         check_factual_accuracy(message, context),
         check_tone_segment(message, context),
-        check_emotional_control(message, context),
+        check_emotional_context(message, context),
         check_logical_coherence(message, prior),
         check_regulatory_compliance(message),
         check_language_quality(message, context),
         check_personalization(message, context),
-        check_conversation_continuity(message, context, prior),
-        check_data_safety(message),
+        check_conversation_completeness(message, context, prior),
+        check_offer_validity(message, context),
     ]

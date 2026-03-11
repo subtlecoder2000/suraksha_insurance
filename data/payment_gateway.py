@@ -60,7 +60,7 @@ def get_payment_history(policy_id: str) -> list[PaymentTransaction]:
 
 def generate_upi_qr(policy_id: str, amount: float) -> dict:
     return {
-        "qr_code": f"upi://pay?pa=renewai@upi&pn=SurekhaInsurance&am={amount}&tn={policy_id}",
+        "qr_code": f"upi://pay?pa=renewai@upi&pn=SurakshaInsurance&am={amount}&tn={policy_id}",
         "deeplink": f"https://pay.renewai.in/qr/{policy_id}",
         "amount": amount,
         "expires_in_minutes": 30,

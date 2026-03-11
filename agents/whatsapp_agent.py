@@ -59,8 +59,12 @@ def send_whatsapp(
     context: dict,
     tone: str = "friendly",
     include_qr: bool = True,
+    deliver: bool = True,
 ) -> WhatsAppMessage:
-    """Send (stub) a WhatsApp renewal message with optional UPI QR."""
+    """
+    Generate and optionally SEND a WhatsApp renewal message.
+    Set deliver=False to only draft for critique.
+    """
     body = _build_wa_message(context, tone)
     qr = None
     if include_qr:
@@ -69,6 +73,9 @@ def send_whatsapp(
     buttons = ["✅ Pay Now", "📞 Call Me", "❓ More Info"]
     add_turn(policy_id, "assistant", body, channel="whatsapp",
              language=context.get("language", "English"))
+
+    if deliver:
+        print(f"  [WhatsAppAgent] 💬 Sent WA message to {phone} | {body[:80].strip()!r}")
 
     msg = WhatsAppMessage(
         policy_id=policy_id,
@@ -79,7 +86,6 @@ def send_whatsapp(
         buttons=buttons,
         sent_at=datetime.now(),
     )
-    print(f"  [WhatsAppAgent] 💬 Sent WA message to {phone} | {body[:80].strip()!r}")
     return msg
 
 
@@ -98,7 +104,7 @@ def handle_reply(policy_id: str, phone: str, customer_text: str, context: dict) 
     qr = None
     text = customer_text.lower()
 
-    if any(k in text for k in ("emi", "installment", "instalment", "split payment", "part payment")):
+    if any(k in text for k in ("emi", "installment", "instalment", "split payment", "part payment", "pay later")):
         part = context.get("emi_amount", round(context.get("premium", 0) / 3, 2))
         qr = generate_upi_qr(policy_id, part)
         response_body = (
@@ -107,15 +113,43 @@ def handle_reply(policy_id: str, phone: str, customer_text: str, context: dict) 
             f"• Pay first part now: 👉 {qr['deeplink']}\n\n"
             "Reply *CALL* if you want an advisor to confirm installment setup."
         )
-    elif "payment_intent" in intents or "PAY" in customer_text.upper():
+    elif "payment_intent" in intents or "PAY" in customer_text.upper() or "RECEIPT" in customer_text.upper():
         qr = generate_upi_qr(policy_id, context.get("premium", 0))
         response_body = (
             f"Great! 🎉 Here's your payment link:\n"
             f"👉 {qr['deeplink']}\n\n"
             f"Amount: ₹{context.get('premium', 0):,.0f} | Expires in 30 mins.\n"
-            f"After payment, your policy renews instantly ✅"
+            f"After payment, your policy renews instantly ✅. (If you have a receipt, simply upload it here for parsing)."
         )
-    elif "price_objection" in intents:
+    elif "help" in text or "faq" in text or "options" in text:
+        response_body = (
+            "I'm here to assist you! 😊 Here are a few things I can help with:\n\n"
+            "• *POLICY* - View your policy summary and coverage\n"
+            "• *PAY* - Get a quick payment link\n"
+            "• *EMI* - View flexible installment plans\n"
+            "• *CALL* - Request a callback from an expert\n"
+            "• *OFFER* - Check your personalized loyalty benefits\n\n"
+            "Just reply with any of the keywords above!"
+        )
+    elif any(k in text for k in ("policy", "details", "cover", "product", "sum assured", "summary")):
+        response_body = (
+            f"📄 *Policy Summary for {context.get('name')}*\n\n"
+            f"• *Product:* {context.get('policy_product')}\n"
+            f"• *Policy No:* {context.get('policy_number')}\n"
+            f"• *Type:* {context.get('policy_type')}\n"
+            f"• *Sum Assured:* ₹{context.get('sum_assured', 0):,.0f}\n"
+            f"• *Renewal Due:* {context.get('renewal_date')}\n"
+            f"• *Premium:* ₹{context.get('premium', 0):,.0f}\n\n"
+            "Would you like to *PAY* now or view *EMI* options?"
+        )
+    elif any(k in text for k in ("morning", "afternoon", "evening")) and "call" not in text:
+        # Acknowledge the slot
+        slot = "Evening (5-8 PM)" if "evening" in text else ("Morning (9-12 AM)" if "morning" in text else "Afternoon (1-5 PM)")
+        response_body = (
+            f"✅ Confirmed! I've scheduled your callback for the *{slot}* slot.\n\n"
+            "A renewal specialist will call you on this number. Is there anything else I can help with in the meantime?"
+        )
+    elif "price_objection" in intents or "delay_objection" in intents or "not renewing" in text:
         objection_resp = retrieve_objection_response(
             customer_text, language=context.get("language", "English"),
             segment=context.get("segment"), context=context
@@ -127,11 +161,11 @@ def handle_reply(policy_id: str, phone: str, customer_text: str, context: dict) 
             "Sure, I can arrange a callback from our renewal specialist.\n"
             "Please share your preferred slot: *Morning (9-12)*, *Afternoon (1-5)*, or *Evening (5-8)*."
         )
-    elif sentiment == "distressed":
+    elif sentiment in ("distressed", "negative") or any(k in text for k in ("hardship", "illness", "hospital", "dispute", "complaint", "fraud")):
         escalate = True
         response_body = (
             "I'm really sorry to hear that. 💙 Let me connect you with a dedicated specialist "
-            "who can personally assist you. You'll receive a call within the next 2 hours."
+            "who can personally assist you with this matter. You'll receive a call shortly."
         )
     else:
         response_body = (

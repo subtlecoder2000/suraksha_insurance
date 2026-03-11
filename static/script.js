@@ -1,7 +1,7 @@
-"""
+/*
 static/script.js
 Vanilla JS Frontend Logic — Suraksha Life Insurance PROJECT RenewAI v2.0
-"""
+*/
 
 let currentSection = 'dashboard';
 let currentJourneyTab = 'A';
@@ -68,152 +68,184 @@ async function refreshData(section) {
 }
 
 async function fetchDashboardStats() {
-    const res = await fetch('/api/dashboard/stats');
-    const data = await res.json();
-    
-    const grid = document.getElementById('main-stats-grid');
-    grid.innerHTML = `
-        <div class="glass-card fade-in">
-            <p class="stat-label">Main Persistency</p>
-            <p class="stat-value">${(data.financial.persistency_before)}</p>
-            <p class="stat-delta delta-up">Target: ${data.financial.persistency_target}</p>
-        </div>
-        <div class="glass-card fade-in" style="animation-delay: 0.1s;">
-            <p class="stat-label">Pending Policies</p>
-            <p class="stat-value">${data.pipeline.pending}</p>
-            <p class="stat-label">Due 30 Days: ${data.pipeline.due_30_days}</p>
-        </div>
-        <div class="glass-card fade-in" style="animation-delay: 0.2s;">
-            <p class="stat-label">Human Queue</p>
-            <p class="stat-value">${data.pipeline.distressed}</p>
-            <p class="stat-delta delta-down">Escalation Rate: 10%</p>
-        </div>
-        <div class="glass-card fade-in" style="animation-delay: 0.3s;">
-            <p class="stat-label">3-Year NPV</p>
-            <p class="stat-value">₹89.2 Cr</p>
-            <p class="stat-delta delta-up">ROI: 8 Months</p>
-        </div>
-    `;
+    try {
+        const res = await fetch('/api/dashboard/stats');
+        const data = await res.json();
+        
+        const grid = document.getElementById('main-stats-grid');
+        if (!grid) return;
+        
+        grid.innerHTML = `
+            <div class="glass-card fade-in">
+                <p class="stat-label">Main Persistency</p>
+                <p class="stat-value">${(data.financial?.persistency_before || '71%')}</p>
+                <p class="stat-delta delta-up">Target: ${data.financial?.persistency_target || '88%'}</p>
+            </div>
+            <div class="glass-card fade-in" style="animation-delay: 0.1s;">
+                <p class="stat-label">Pending Policies</p>
+                <p class="stat-value">${data.pipeline?.pending || '0'}</p>
+                <p class="stat-label">Due 30 Days: ${data.pipeline?.due_30_days || '0'}</p>
+            </div>
+            <div class="glass-card fade-in" style="animation-delay: 0.2s;">
+                <p class="stat-label">Human Queue</p>
+                <p class="stat-value">${data.pipeline?.distressed || '0'}</p>
+                <p class="stat-delta delta-down">Escalation Rate: 10%</p>
+            </div>
+            <div class="glass-card fade-in" style="animation-delay: 0.3s;">
+                <p class="stat-label">3-Year NPV</p>
+                <p class="stat-value">₹89.2 Cr</p>
+                <p class="stat-delta delta-up">ROI: 8 Months</p>
+            </div>
+        `;
+    } catch (err) {
+        console.error("Failed to fetch dashboard stats:", err);
+    }
 }
 
 async function fetchPipeline() {
-    const res = await fetch('/api/pipeline');
-    const data = await res.json();
-    const body = document.getElementById('pipeline-body');
-    body.innerHTML = '';
-    data.forEach(ph => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${ph.name}</td>
-            <td>${ph.policy_number}</td>
-            <td>${ph.policy_type}</td>
-            <td>${ph.premium.toLocaleString('en-IN')}</td>
-            <td>${ph.renewal_due_date}</td>
-            <td><span class="badge ${ph.lapse_risk === 'High' ? 'badge-red' : (ph.lapse_risk === 'Low' ? 'badge-green' : 'badge-gold')}">${ph.lapse_risk}</span></td>
-            <td><span class="badge ${ph.last_payment_status === 'Paid' ? 'badge-green' : 'badge-blue'}">${ph.last_payment_status}</span></td>
-        `;
-        body.appendChild(row);
-    });
+    try {
+        const res = await fetch('/api/pipeline');
+        const data = await res.json();
+        const body = document.getElementById('pipeline-body');
+        if (!body || !Array.isArray(data)) return;
+        body.innerHTML = '';
+        data.forEach(ph => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${ph.name || ''}</td>
+                <td>${ph.policy_number || ''}</td>
+                <td>${ph.policy_type || ''}</td>
+                <td>${(ph.premium || 0).toLocaleString('en-IN')}</td>
+                <td>${ph.renewal_due_date || ''}</td>
+                <td><span class="badge ${ph.lapse_risk === 'High' ? 'badge-red' : (ph.lapse_risk === 'Low' ? 'badge-green' : 'badge-gold')}">${ph.lapse_risk || 'Low'}</span></td>
+                <td><span class="badge ${ph.last_payment_status === 'Paid' ? 'badge-green' : 'badge-blue'}">${ph.last_payment_status || 'Pending'}</span></td>
+            `;
+            body.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Failed to fetch pipeline:", err);
+    }
 }
 
 async function fetchScorecard() {
-    const res = await fetch('/api/dashboard/stats');
-    const data = await res.json();
-    const scorecard = data.scorecard;
-    const container = document.getElementById('scorecard-container');
-    container.innerHTML = '<h3>Scorecard — FY25 Baseline vs FY26 Target</h3><br>';
-    
-    scorecard.forEach((s, idx) => {
-        const row = document.createElement('div');
-        row.className = 'score-row fade-in';
-        row.style.animationDelay = (idx * 0.05) + 's';
+    try {
+        const res = await fetch('/api/dashboard/stats');
+        const data = await res.json();
+        const scorecard = data.scorecard;
+        const container = document.getElementById('scorecard-container');
+        if (!container || !Array.isArray(scorecard)) return;
+        container.innerHTML = '<h3>Scorecard — FY25 Baseline vs FY26 Target</h3><br>';
         
-        let perc = parseInt(s.current.replace('%','')) || 0;
-        if (s.metric.includes('Cost')) perc = (45 / parseInt(s.current.replace('₹',''))) * 100 || 10;
-        
-        row.innerHTML = `
-            <div class="score-meta">
-                <span><b>${s.metric}</b></span>
-                <span>Base: ${s.baseline} | Target: ${s.target} | <b>Current: ${s.current}</b></span>
-            </div>
-            <div class="progress-track">
-                <div class="progress-bar ${s.status === '🟢' ? 'target-met' : ''}" style="width: ${perc}%"></div>
-            </div>
-        `;
-        container.appendChild(row);
-    });
+        scorecard.forEach((s, idx) => {
+            const row = document.createElement('div');
+            row.className = 'score-row fade-in';
+            row.style.animationDelay = (idx * 0.05) + 's';
+            
+            let val = s.current || '0%';
+            let perc = parseInt(val.replace('%','')) || 0;
+            if (s.metric && s.metric.includes('Cost')) perc = (45 / (parseInt(val.replace('₹','')) || 45)) * 100 || 10;
+            
+            row.innerHTML = `
+                <div class="score-meta">
+                    <span><b>${s.metric || ''}</b></span>
+                    <span>Base: ${s.baseline || ''} | Target: ${s.target || ''} | <b>Current: ${s.current || ''}</b></span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-bar ${s.status === '🟢' ? 'target-met' : ''}" style="width: ${perc}%"></div>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Failed to fetch scorecard:", err);
+    }
 }
 
 async function fetchCritiqueSummary() {
-    const res = await fetch('/api/critique/summary');
-    const data = await res.json();
-    const grid = document.getElementById('critique-stats');
-    grid.innerHTML = `
-        <div class="glass-card fade-in">
-            <p class="stat-label">Total Evaluated</p>
-            <p class="stat-value">${data.total_evaluated}</p>
-        </div>
-        <div class="glass-card fade-in">
-            <p class="stat-label">Pass Rate</p>
-            <p class="stat-value" style="color:var(--accent-green)">${data.pass_rate}</p>
-        </div>
-        <div class="glass-card fade-in">
-            <p class="stat-label">Block Rate</p>
-            <p class="stat-value" style="color:var(--accent-red)">${data.block_rate}</p>
-        </div>
-        <div class="glass-card fade-in">
-            <p class="stat-label">Total Cost Saved</p>
-            <p class="stat-value">₹14.2 Cr</p>
-        </div>
-    `;
+    try {
+        const res = await fetch('/api/critique/summary');
+        const data = await res.json();
+        const grid = document.getElementById('critique-stats');
+        if (!grid) return;
+        grid.innerHTML = `
+            <div class="glass-card fade-in">
+                <p class="stat-label">Total Evaluated</p>
+                <p class="stat-value">${data.total_evaluated || 0}</p>
+            </div>
+            <div class="glass-card fade-in">
+                <p class="stat-label">Pass Rate</p>
+                <p class="stat-value" style="color:var(--accent-green)">${data.pass_rate || '0%'}</p>
+            </div>
+            <div class="glass-card fade-in">
+                <p class="stat-label">Block Rate</p>
+                <p class="stat-value" style="color:var(--accent-red)">${data.block_rate || '0%'}</p>
+            </div>
+            <div class="glass-card fade-in">
+                <p class="stat-label">Total Cost Saved</p>
+                <p class="stat-value">₹14.2 Cr</p>
+            </div>
+        `;
+    } catch (err) {
+        console.error("Failed to fetch critique summary:", err);
+    }
 }
 
 async function fetchHumanQueue() {
-    const res = await fetch('/api/human_queue');
-    const data = await res.json();
-    const container = document.getElementById('queue-items-container');
-    container.innerHTML = '';
-    
-    if (data.items.length === 0) {
-        container.innerHTML = '<p class="stat-label">No escalated cases. Run Journey B to see an escalation.</p>';
-        return;
+    try {
+        const res = await fetch('/api/human_queue');
+        const data = await res.json();
+        const container = document.getElementById('queue-items-container');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        if (!data.items || data.items.length === 0) {
+            container.innerHTML = '<p class="stat-label">No escalated cases. Run Journey B to see an escalation.</p>';
+            return;
+        }
+        
+        data.items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'glass-card fade-in';
+            card.style.marginBottom = '1.5rem';
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h4 style="color:var(--accent-red)">Case: ${item.case_id || 'N/A'} — ${item.customer_name || 'Anonymous'}</h4>
+                    <span class="badge badge-red">${item.priority || 'Medium'}</span>
+                </div>
+                <p style="margin-bottom:10px;"><b>Reason:</b> ${item.escalation_reason || 'Manual escalation'}</p>
+                <p style="margin-bottom:10px; font-size: 0.9rem;"><b>Specialist:</b> ${item.specialist_type || 'Agent'} | <b>SLA:</b> ${item.sla_hours || '24'}h</p>
+                <div style="background:rgba(0,0,0,0.1); padding:10px; border-radius:8px; font-size:0.85rem; color:var(--text-secondary);">
+                    ${item.recommended_approach || 'Review customer history and follow up.'}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    } catch (err) {
+        console.error("Failed to fetch human queue:", err);
     }
-    
-    data.items.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'glass-card fade-in';
-        card.style.marginBottom = '1.5rem';
-        card.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-                <h4 style="color:var(--accent-red)">Case: ${item.case_id} — ${item.customer_name}</h4>
-                <span class="badge badge-red">${item.priority}</span>
-            </div>
-            <p style="margin-bottom:10px;"><b>Reason:</b> ${item.escalation_reason}</p>
-            <p style="margin-bottom:10px; font-size: 0.9rem;"><b>Specialist:</b> ${item.specialist_type} | <b>SLA:</b> ${item.sla_hours}h</p>
-            <div style="background:rgba(0,0,0,0.1); padding:10px; border-radius:8px; font-size:0.85rem; color:var(--text-secondary);">
-                ${item.recommended_approach}
-            </div>
-        `;
-        container.appendChild(card);
-    });
 }
 
 async function fetchAuditLog() {
-    const res = await fetch('/api/observability/audit_log');
-    const data = await res.json();
-    const body = document.getElementById('audit-body');
-    body.innerHTML = '';
-    data.irdai.forEach(log => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${log.timestamp.slice(11, 19)}</td>
-            <td>${log.policy_id}</td>
-            <td>${log.event_type}</td>
-            <td>${log.action}</td>
-            <td><span class="badge badge-green">COMPLIANT</span></td>
-        `;
-        body.appendChild(row);
-    });
+    try {
+        const res = await fetch('/api/observability/audit_log');
+        const data = await res.json();
+        const body = document.getElementById('audit-body');
+        if (!body || !data.irdai || !Array.isArray(data.irdai)) return;
+        body.innerHTML = '';
+        data.irdai.forEach(log => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${(log.timestamp || '').slice(11, 19)}</td>
+                <td>${log.policy_id || ''}</td>
+                <td>${log.event_type || ''}</td>
+                <td>${log.action || ''}</td>
+                <td><span class="badge badge-green">COMPLIANT</span></td>
+            `;
+            body.appendChild(row);
+        });
+    } catch (err) {
+        console.error("Failed to fetch audit log:", err);
+    }
 }
 
 // ── JOURNEY TRIGGER ──────────────────────────────────────────────────────────
@@ -250,17 +282,42 @@ async function triggerJourney() {
     
     // 3. Simulate Customer Interaction
     if (currentJourneyTab === 'A') {
-        // Rajesh asks about EMI
+        // Expanded Simulation sequence for Rajesh
         setTimeout(async () => {
-            addChatTurn('user', 'Rajesh', "Can I pay in two instalments?");
-            const replyRes = await fetch('/api/journey/reply', {
+            // 1. HELP Request
+            addChatTurn('user', 'Rajesh', "help");
+            const resHelp = await fetch('/api/journey/reply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ policy_id: polId, message: "Can I pay in two instalments?" })
+                body: JSON.stringify({ policy_id: polId, message: "help" })
             });
-            const replyData = await replyRes.json();
-            setTimeout(() => addChatTurn('ai', 'WhatsAppAgent', replyData.reply), 1000);
-        }, 1500);
+            const dataHelp = await resHelp.json();
+            addChatTurn('ai', 'WhatsAppAgent', dataHelp.reply);
+
+            // 2. POLICY DETAILS Request
+            setTimeout(async () => {
+                addChatTurn('user', 'Rajesh', "Show me my policy details");
+                const resPol = await fetch('/api/journey/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policy_id: polId, message: "Show me my policy details" })
+                });
+                const dataPol = await resPol.json();
+                addChatTurn('ai', 'WhatsAppAgent', dataPol.reply);
+
+                // 3. CALL Slot Acknowledgment
+                setTimeout(async () => {
+                    addChatTurn('user', 'Rajesh', "I want a callback. Evening works.");
+                    const resCall = await fetch('/api/journey/reply', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ policy_id: polId, message: "I want a callback. Evening works." })
+                    });
+                    const dataCall = await resCall.json();
+                    addChatTurn('ai', 'WhatsAppAgent', dataCall.reply);
+                }, 4000);
+            }, 4000);
+        }, 2000);
     } 
     else if (currentJourneyTab === 'B') {
         // Meenakshi bereavement

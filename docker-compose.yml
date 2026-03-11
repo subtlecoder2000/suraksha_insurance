@@ -1,0 +1,37 @@
+
+services:
+  # Python Backend API (FastAPI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: suraksha-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./renewai.db:/app/renewai.db
+    restart: unless-stopped
+    # Use healthcheck to ensure the backend is up before the frontend starts (optional but helpful)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/\")'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend (Nginx Proxy)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: suraksha-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+# Named volume for persistent database storage (if not using local bind mount)
+# In this case, we'll keep the local bind mount for the developer's convenience.

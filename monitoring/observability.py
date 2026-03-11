@@ -90,6 +90,23 @@ def get_irdai_audit_log() -> list[dict]:
         for e in _AUDIT_LOG if e.irdai_relevant
     ]
 
+def get_all_audit_logs() -> list[dict]:
+    return [
+        {
+            "id": e.event_id,
+            "timestamp": e.timestamp.isoformat(),
+            "policy_id": e.policy_id,
+            "type": e.event_type.value,
+            "agent": e.agent,
+            "action": e.action,
+            "channel": e.channel,
+            "outcome": e.outcome,
+            "irdai_relevant": e.irdai_relevant,
+        }
+        for e in _AUDIT_LOG
+    ]
+
+
 
 def get_escalation_log() -> list[AuditEvent]:
     return [e for e in _AUDIT_LOG if e.event_type == EventType.ESCALATION]

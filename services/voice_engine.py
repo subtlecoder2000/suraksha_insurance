@@ -47,27 +47,27 @@ def get_script(language: str, context: dict) -> VoiceScript:
         return VoiceScript(
             language=language,
             greeting=f"{greeting} {name} ji,",
-            intro=f"Main Surekha Insurance se Priya bol rahi hoon.",
+            intro=f"Main Suraksha Insurance se Priya bol rahi hoon.",
             renewal_ask=(
                 f"Aapki policy {renewal_date} ko renew hone wali hai. "
                 f"Annual premium ₹{premium:,.0f} hai."
             ),
             objection_handler="Aapki baat sunna chahti hoon — kya koi concern hai?",
             payment_offer=f"{offer_text} Kya main abhi UPI payment link bhejoon?",
-            closing="Dhanyavaad! Surekha Insurance mein vishwas rakhne ke liye shukriya.",
+            closing="Dhanyavaad! Suraksha Insurance mein vishwas rakhne ke liye shukriya.",
         )
     # Default English
     return VoiceScript(
         language="English",
         greeting=f"{greeting} {name},",
-        intro="This is Priya calling from Surekha Insurance.",
+        intro="This is Priya calling from Suraksha Insurance.",
         renewal_ask=(
             f"Your policy is due for renewal on {renewal_date}. "
             f"Your annual premium is ₹{premium:,.0f}."
         ),
         objection_handler="I'd love to understand your concerns — what's on your mind?",
         payment_offer=f"{offer_text} May I send you a UPI payment link right now?",
-        closing="Thank you for being a valued Surekha Insurance customer!",
+        closing="Thank you for being a valued Suraksha Insurance customer!",
     )
 
 

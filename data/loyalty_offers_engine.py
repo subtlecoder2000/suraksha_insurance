@@ -92,7 +92,7 @@ def _calc_repeat_customer(ph: "Policyholder") -> Optional[LoyaltyOffer]:
         ),
         discount_pct=0.0,
         savings_inr=0.0,
-        conditions=[f"{ph.years_as_customer}+ years as Surekha Insurance customer"],
+        conditions=[f"{ph.years_as_customer}+ years as Suraksha Insurance customer"],
     )
 
 
